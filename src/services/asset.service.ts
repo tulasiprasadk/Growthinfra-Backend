@@ -1,1 +1,0 @@
-// Content asset service (stub)

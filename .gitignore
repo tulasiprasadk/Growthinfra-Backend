@@ -1,5 +1,7 @@
-#.gitignore for backend
+node_modules
+dist
+dist-ssr
 .env
-node_modules/
-dist/
-.next/
+uploads
+.DS_Store
+uploads/*
