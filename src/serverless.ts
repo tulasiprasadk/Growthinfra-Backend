@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ExpressAdapter } from '@nestjs/platform-express';
-import * as express from 'express';
+import express = require('express');
 import serverless from 'serverless-http';
 import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
@@ -48,3 +48,4 @@ const handler = async (req: any, res: any) => {
 };
 
 export default handler;
+
