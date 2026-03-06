@@ -2,20 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import express = require('express');
-import serverless from 'serverless-http';
 import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 
-let cachedHandler: any = null;
+let cachedApp: any = null;
 
 async function createServer() {
   const expressApp = express();
 
-  // Increase body size limits for base64 image uploads
   expressApp.use(express.json({ limit: '15mb' }));
   expressApp.use(express.urlencoded({ extended: true, limit: '15mb' }));
-
-  // Serve uploads
   expressApp.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
   const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
@@ -30,8 +26,8 @@ async function createServer() {
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  app.enableCors({ origin: origins, credentials: true });
 
+  app.enableCors({ origin: origins, credentials: true });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
 
@@ -39,15 +35,10 @@ async function createServer() {
   return expressApp;
 }
 
-const handler = async (req: any, res: any) => {
-  if (!cachedHandler) {
-    const app = await createServer();
-    cachedHandler = serverless(app, { callbackWaitsForEmptyEventLoop: false } as any);
+export default async function handler(req: any, res: any) {
+  if (!cachedApp) {
+    cachedApp = await createServer();
   }
-  return cachedHandler(req, res);
-};
 
-export default handler;
-
-
-
+  return cachedApp(req, res);
+}
