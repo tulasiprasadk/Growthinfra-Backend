@@ -2,10 +2,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+datasource db {`r`n  provider  = "postgresql"`r`n  url       = env("DATABASE_URL")`r`n  directUrl = env("DIRECT_URL")`r`n}
 
 model User {
   id          String       @id @default(cuid())
@@ -118,3 +115,4 @@ model Subscription {
   organization Organization @relation(fields: [organizationId], references: [id])
   plan         Plan         @relation(fields: [planId], references: [id])
 }
+
