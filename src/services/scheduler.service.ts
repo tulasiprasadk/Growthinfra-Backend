@@ -61,14 +61,20 @@ export class SchedulerService {
   }
 
   private startScheduler() {
+    if (process.env.VERCEL) {
+      this.logger.log('Scheduler disabled in Vercel serverless runtime');
+      return;
+    }
+
     if (this.isRunning) return;
     this.isRunning = true;
-    
+
     // Check every 10 seconds for posts to publish
-    setInterval(() => {
+    const timer = setInterval(() => {
       this.publishDuePosts();
     }, 10000);
-    
+    timer.unref?.();
+
     this.logger.log('Scheduler started - checking every 10 seconds');
   }
 
@@ -124,3 +130,4 @@ export class SchedulerService {
     }
   }
 }
+

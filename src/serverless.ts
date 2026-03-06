@@ -42,10 +42,12 @@ async function createServer() {
 const handler = async (req: any, res: any) => {
   if (!cachedHandler) {
     const app = await createServer();
-    cachedHandler = serverless(app);
+    cachedHandler = serverless(app, { callbackWaitsForEmptyEventLoop: false } as any);
   }
   return cachedHandler(req, res);
 };
 
 export default handler;
+
+
 
