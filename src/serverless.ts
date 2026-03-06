@@ -39,10 +39,12 @@ async function createServer() {
   return expressApp;
 }
 
-export const handler = async (req: any, res: any) => {
+const handler = async (req: any, res: any) => {
   if (!cachedHandler) {
     const app = await createServer();
     cachedHandler = serverless(app);
   }
   return cachedHandler(req, res);
 };
+
+export default handler;
