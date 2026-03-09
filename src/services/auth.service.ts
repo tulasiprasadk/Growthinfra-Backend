@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -19,6 +20,11 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {}
+
+  private isPublicSignupEnabled() {
+    if (!process.env.VERCEL) return true;
+    return String(this.config.get<string>('ALLOW_PUBLIC_SIGNUP') || '').toLowerCase() === 'true';
+  }
 
   private getJwtSecret() {
     return this.config.get<string>('JWT_SECRET') || 'growthinfra-dev-secret';
@@ -62,6 +68,10 @@ export class AuthService {
   }
 
   async signup(email: string, password: string) {
+    if (!this.isPublicSignupEnabled()) {
+      throw new ForbiddenException('Public signup is disabled. Contact the administrator for access.');
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
     const existing = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
