@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "postinstall": "npx prisma generate",
+    "postinstall": "npx prisma generate && node -e \"if (process.env.VERCEL) { require('child_process').execSync('npx prisma migrate deploy', { stdio: 'inherit' }); }\"",
     "start": "npx nest start",
     "dev": "npx nest start --watch",
     "build": "npx nest build",
