@@ -8,6 +8,7 @@ import { SocialController } from './controllers/social.controller';
 import { UnsplashController } from './controllers/unsplash.controller';
 import { SchedulerController } from './controllers/scheduler.controller';
 import { AuthController } from './controllers/auth.controller';
+import { ReportController } from './controllers/report.controller';
 import { SocialService } from './services/social.service';
 import { SchedulerService } from './services/scheduler.service';
 import { UnsplashRefreshService } from './services/unsplash-refresh.service';
@@ -34,6 +35,7 @@ import { HealthController } from './health/health.controller';
     StatusController,
     SearchController,
     AuthController,
+    ReportController,
     OrgController,
     SocialController,
     SchedulerController,

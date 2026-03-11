@@ -1,9 +1,10 @@
-import { Controller, Get, Query, Res, Logger, Post, Body, Delete, Param, Patch } from '@nestjs/common';
+import { Controller, Get, Query, Res, Logger, Post, Body, Delete, Param, Patch, Headers, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
 import { SocialService } from '../services/social.service';
 import { SchedulerService } from '../services/scheduler.service';
 import { ConfigService } from '@nestjs/config';
+import { AuthService } from '../services/auth.service';
 
 interface PublishDto {
 	pageId: string;
@@ -20,7 +21,7 @@ interface UploadImageDto {
 export class SocialController {
 	private readonly logger = new Logger(SocialController.name);
 
-	constructor(private social: SocialService, private scheduler: SchedulerService, private config: ConfigService) {}
+	constructor(private social: SocialService, private scheduler: SchedulerService, private config: ConfigService, private authService: AuthService) {}
 
 	@Get('connect/facebook')
 	async connectFacebook(@Res() res) {
@@ -280,11 +281,18 @@ export class SocialController {
 	}
 
 	@Get('pages')
-	async listPages() {
+	async listPages(@Headers('authorization') authorization?: string) {
+		const user = await this.authService.getUserFromAuthorization(authorization);
+		const allowedOrganizationIds = new Set((user.memberships || []).map((membership) => membership.organization.id));
 		const pages = await this.social.getStoredPages();
 		// return account info including accessToken
 		const results = await Promise.all(
-			pages.map(async (p) => {
+			pages
+				.filter((p: any) => {
+					const orgId = (p as any)?.organizationId || null;
+					return orgId ? allowedOrganizationIds.has(orgId) : false;
+				})
+				.map(async (p) => {
 				const orgId = (p as any)?.organizationId || null;
 				const orgName = (p as any)?.organization?.name || 'Unassigned';
 				const hasPrefix = p.provider.includes(':');
@@ -346,22 +354,44 @@ export class SocialController {
 	}
 
 	@Delete('pages/:id')
-	async deletePage(@Param('id') id: string) {
+	async deletePage(@Param('id') id: string, @Headers('authorization') authorization?: string) {
+		const user = await this.authService.getUserFromAuthorization(authorization);
+		const account = await this.social.getAccountById(id);
+		if (!account) {
+			throw new UnauthorizedException('Account not found');
+		}
+		if (!this.authService.hasOrganizationAccess(user, (account as any).organizationId, ['owner', 'admin'])) {
+			throw new ForbiddenException('You do not have permission to manage this account');
+		}
 		await this.social.deleteSocialAccount(id);
 		return { ok: true };
 	}
 
 	@Patch('pages/:id/organization')
-	async updatePageOrganization(@Param('id') id: string, @Body() body: { organizationId?: string }) {
+	async updatePageOrganization(@Param('id') id: string, @Body() body: { organizationId?: string }, @Headers('authorization') authorization?: string) {
 		if (!body?.organizationId) {
 			return { ok: false, error: 'organizationId is required' };
+		}
+		const user = await this.authService.getUserFromAuthorization(authorization);
+		const account = await this.social.getAccountById(id);
+		if (!account) {
+			throw new UnauthorizedException('Account not found');
+		}
+		const canManageCurrent = this.authService.hasOrganizationAccess(user, (account as any).organizationId, ['owner', 'admin']);
+		const canAssignTarget = this.authService.hasOrganizationAccess(user, body.organizationId, ['owner', 'admin']);
+		if (!canManageCurrent || !canAssignTarget) {
+			throw new ForbiddenException('You do not have permission to reassign this account');
 		}
 		await this.social.updateSocialAccountOrganization(id, body.organizationId);
 		return { ok: true };
 	}
 
 	@Delete('pages')
-	async deleteAllPages() {
+	async deleteAllPages(@Headers('authorization') authorization?: string) {
+		const user = await this.authService.getUserFromAuthorization(authorization);
+		if (!user.isAdmin) {
+			throw new ForbiddenException('Admin membership required');
+		}
 		await this.social.deleteAllSocialAccounts();
 		return { ok: true };
 	}
