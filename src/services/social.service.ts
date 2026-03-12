@@ -378,9 +378,20 @@ export class SocialService {
 			new Set([providerKey, legacyKey, normalizedLabel ? `twitter:${normalizedLabel}` : ''].filter(Boolean)),
 		);
 
-		const existing = await this.prisma.socialAccount.findFirst({
+		let existing = await this.prisma.socialAccount.findFirst({
 			where: { provider: { in: candidateProviders } },
 		});
+		if (!existing && normalizedLabel) {
+			existing = await this.prisma.socialAccount.findFirst({
+				where: {
+					organizationId: targetOrganizationId || undefined,
+					OR: [
+						{ provider: 'twitter:default' },
+						{ provider: { startsWith: 'twitter:account_' } },
+					],
+				},
+			});
+		}
 		if (existing) {
 			return this.prisma.socialAccount.update({
 				where: { id: existing.id },
