@@ -157,9 +157,17 @@ export class SocialService {
 			this.config.get<string>('LINKEDIN_REDIRECT') ||
 			`${this.config.get<string>('BACKEND_URL') || 'http://localhost:6001'}/api/social/callback/linkedin`;
 
-		// Use OpenID Connect profile scope and Sign In with LinkedIn (V2) API
-		// These are the most basic scopes that should be available to all apps
-		const scope = ['openid', 'profile', 'email', 'w_member_social'].join(' ');
+		// Request organization scopes so we can read/manage Pages (requires LinkedIn app approval)
+		// Note: LinkedIn may require Community Management API product and app-level approval
+		const scope = [
+			'openid',
+			'profile',
+			'email',
+			'w_member_social',
+			'r_organization_social',
+			'w_organization_social',
+			'offline_access',
+		].join(' ');
 
 		return `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(
 			redirect,
@@ -450,6 +458,27 @@ export class SocialService {
 		const json: any = await res.json();
 		if (!res.ok) {
 			this.logger.warn(`LinkedIn orgs API error (${res.status}): ${JSON.stringify(json)}`);
+		}
+
+		async getLinkedInOrganizationName(orgId: string, accessToken: string) {
+			if (!orgId || !accessToken) return null;
+			try {
+				// Fetch organization basic fields. Requires appropriate organization scopes.
+				const res = await fetch(`https://api.linkedin.com/v2/organizations/${encodeURIComponent(orgId)}?projection=(localizedName,vanityName)` , {
+					headers: { Authorization: `Bearer ${accessToken}` },
+				});
+				if (!res.ok) {
+					const txt = await res.text();
+					this.logger.warn(`LinkedIn organization lookup failed (${res.status}): ${txt}`);
+					return null;
+				}
+				const json: any = await res.json();
+				// localizedName is the human readable organization name
+				return json?.localizedName || json?.vanityName || null;
+			} catch (e) {
+				this.logger.warn(`Could not fetch LinkedIn organization ${orgId}: ${String(e)}`);
+				return null;
+			}
 		}
 		const elements = Array.isArray(json?.elements) ? json.elements : [];
 		const orgIds = elements

@@ -121,7 +121,8 @@ export class AiService {
         try {
           const data: any = await this.replicatePredict(replicateImageModel, { prompt, num_outputs: count });
           const outputs = data.output || data.outputs || data.result;
-          return { images: Array.isArray(outputs) ? outputs.flat() : [], raw: data };
+          const images = this.normalizeMediaOutputs(outputs);
+          return { images, raw: data };
         } catch (e) {
           console.warn('Replicate image generation failed, falling back:', e?.message || e);
         }
@@ -129,7 +130,8 @@ export class AiService {
 
       if (this.isLlmEnabled) {
         const data: any = await this.callLlm({ prompt, mode: 'image', count });
-        return { images: data.images || data.generated_images || [], raw: data };
+        const images = this.normalizeMediaOutputs(data.images || data.generated_images || data.output || data.outputs || data);
+        return { images, raw: data };
       }
 
       return { images: [], raw: null };
@@ -191,6 +193,42 @@ export class AiService {
     } catch (error) {
       console.error('❌ Reel generation failed:', error);
       return { error: 'Reel generation failed', message: error?.message || error } as any;
+    }
+  }
+
+  /**
+   * Ask the configured LLM to suggest hashtags based on context.
+   * Returns an array of hashtags (with leading #) or an empty array on failure.
+   */
+  async generateHashtagSuggestions(context: { caption?: string; topic?: string; brand?: string; description?: string; audience?: string }, count = 8): Promise<string[]> {
+    if (!this.isLlmEnabled) return [];
+    try {
+      const promptLines = [
+        'You are a social media assistant that suggests relevant hashtags for a short social caption.',
+        context.brand ? `Brand: ${context.brand}` : undefined,
+        context.topic ? `Topic: ${context.topic}` : undefined,
+        context.description ? `Description: ${context.description}` : undefined,
+        context.audience ? `Audience: ${context.audience}` : undefined,
+        context.caption ? `Caption: ${context.caption}` : undefined,
+        `Return a JSON array of up to ${count} concise hashtags (include the leading #). Do not include any extra text.`,
+      ].filter(Boolean).join('\n');
+
+      const model = process.env.OLLAMA_DEFAULT_MODEL || 'llama2:latest';
+      const data: any = await this.callLlm({ prompt: promptLines, mode: 'text', model });
+      // Attempt to parse returned text as JSON array
+      const text = (data && (data.summary || data.output || (typeof data === 'string' ? data : undefined))) || JSON.stringify(data);
+      try {
+        const parsed = typeof text === 'string' ? JSON.parse(text) : text;
+        if (Array.isArray(parsed)) return parsed.map((h) => (typeof h === 'string' ? (h.startsWith('#') ? h.trim() : `#${h.trim()}`) : '')).filter(Boolean).slice(0, count);
+      } catch {
+        // fallback: extract hashtags by regex
+        const maybe = String(text || '') .match(/#[A-Za-z0-9_]+/g) || [];
+        return Array.from(new Set(maybe)).slice(0, count);
+      }
+      return [];
+    } catch (e) {
+      console.warn('Hashtag LLM suggestion failed:', e?.message || e);
+      return [];
     }
   }
 

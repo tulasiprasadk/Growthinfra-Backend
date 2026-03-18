@@ -405,6 +405,16 @@ export class SocialController {
 					};
 				}
 
+				if (rawPlatform === 'linkedin_org') {
+					// For organization accounts (pages), fetch organization display name when possible
+					const orgName = await this.social.getLinkedInOrganizationName(label, p.accessToken);
+					return {
+						...base,
+						label: orgName || label,
+						platform: 'linkedin',
+					};
+				}
+
 				return { ...base, label };
 			}),
 		);

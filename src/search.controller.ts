@@ -105,12 +105,24 @@ export class SearchController {
     return templates.slice(0, Math.max(1, desiredCount));
   }
 
-  private generateHashtags(normalizedQuery: string, brandName: string, description: string, audience: string, launchContext: string) {
+  private async generateHashtags(
+    normalizedQuery: string,
+    brandName: string,
+    description: string,
+    audience: string,
+    launchContext: string,
+    caption?: string,
+    tagline?: string,
+    website?: string,
+    email?: string,
+    contact?: string,
+  ) {
     const hashtags: string[] = [];
-    const lowerQuery = normalizedQuery.toLowerCase();
-    const lowerDesc = description.toLowerCase();
-    const lowerAudience = audience.toLowerCase();
-    const lowerLaunch = launchContext.toLowerCase();
+    const lowerQuery = (normalizedQuery || '').toLowerCase();
+    const lowerDesc = (description || '').toLowerCase();
+    const lowerAudience = (audience || '').toLowerCase();
+    const lowerLaunch = (launchContext || '').toLowerCase();
+    const lowerCaption = (caption || '').toLowerCase();
 
     const stopwords = new Set([
       'with', 'from', 'that', 'have', 'your', 'about', 'best', 'top', 'this', 'for',
@@ -131,9 +143,13 @@ export class SearchController {
       if (tag && !hashtags.includes(tag)) hashtags.push(tag);
     };
 
+    // Prioritize brand and tagline
     if (brandName) pushTag(toHashtag(brandName));
+    if (tagline) pushTag(toHashtag(tagline));
 
-    const keywords = this.extractKeywords(`${description} ${audience} ${normalizedQuery}`, 6).filter((word) => !stopwords.has(word));
+    // Extract keywords from description, audience, query, and caption
+    const keywordSource = [description, audience, normalizedQuery, caption].filter(Boolean).join(' ');
+    const keywords = this.extractKeywords(keywordSource, 8).filter((word) => !stopwords.has(word));
     keywords.forEach((word) => pushTag(toHashtag(word)));
 
     const industryMap: Record<string, string[]> = {
@@ -158,6 +174,16 @@ export class SearchController {
 
     if (lowerQuery.includes('launch') || lowerLaunch.includes('launch') || lowerQuery.includes('new')) {
       ['#NewLaunch', '#NowLive', '#LaunchDay'].forEach((tag) => pushTag(tag));
+    }
+
+    // If not enough tags, ask LLM (if available)
+    if (hashtags.length < 4 && this.aiService?.isLlmEnabled) {
+      try {
+        const suggestions = await this.aiService.generateHashtagSuggestions({ caption, topic: normalizedQuery, brand: brandName, description, audience }, 8);
+        suggestions.forEach((s) => pushTag(s));
+      } catch (e) {
+        // ignore
+      }
     }
 
     return hashtags.slice(0, 10).join(' ');
@@ -273,7 +299,8 @@ export class SearchController {
         imageQueryParts.push(description);
       }
     }
-    const imageQuery = imageQueryParts.join(' ').replace(/\s{2,}/g, ' ').trim() || topicLabel;
+    // Include the primary short caption as context for image generation to improve relevance
+    const imageQuery = (imageQueryParts.join(' ') + (shortResult ? ` | Caption: ${shortResult}` : '')).replace(/\s{2,}/g, ' ').trim() || topicLabel;
 
     try {
       if (this.aiService.isLlmEnabled) {
@@ -299,7 +326,8 @@ export class SearchController {
 
     try {
       if (this.aiService.isLlmEnabled) {
-        const reelResult = await this.aiService.generateReels(normalizedQuery, 1, requestedVideoDuration);
+        const reelPrompt = [normalizedQuery, shortResult, description].filter(Boolean).join(' | ');
+        const reelResult = await this.aiService.generateReels(reelPrompt, 1, requestedVideoDuration);
         if (Array.isArray(reelResult?.reels) && reelResult.reels.length) {
           reels = reelResult.reels;
           videoStatus = 'ai_video_generated';
@@ -342,7 +370,7 @@ export class SearchController {
       };
     }
 
-    const hashtags = this.generateHashtags(normalizedQuery, brandName, description, audience, launchContext);
+    const hashtags = await this.generateHashtags(normalizedQuery, brandName, description, audience, launchContext, shortResult, tagline, website, email, contact);
 
     return {
       result: shortResult,
